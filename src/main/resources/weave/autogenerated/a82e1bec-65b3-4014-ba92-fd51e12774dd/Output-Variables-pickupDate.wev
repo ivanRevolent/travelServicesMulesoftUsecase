@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_a82e1bec_65b3_4014_ba92_fd51e12774dd_Output_Variables_pickupDate = Any
+

@@ -1,0 +1,25 @@
+http:
+  port: "8081"
+  
+flights:
+  path: "/flights"
+  
+american:
+  host: "training4-american-api.cloudhub.io"
+  port: "80"
+  basepath: "/"
+  protocol: "HTTP"
+  client_id: "d846d01ea59640108779eaaa532d00ca"
+  client_secret: "F7C5ecA48EBA449399b4B140416849B0"
+  
+hotel:
+  host: "test.api.amadeus.com"
+  path: "/v1/reference-data/locations/hotels/by-city"
+  
+  
+car:
+  host: "skyscanner44.p.rapidapi.com"
+  path: "/autocomplete-rentacar"
+  apiKey: "26f32ff971msh10c512caaa3fd48p191f7djsn9fe35909e00d"
+  apiHost: "skyscanner44.p.rapidapi.com"
+  

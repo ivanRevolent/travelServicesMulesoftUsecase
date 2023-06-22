@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:american-flights-api="http://www.mulesoft.org/schema/mule/american-flights-api"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/american-flights-api http://www.mulesoft.org/schema/mule/american-flights-api/current/mule-american-flights-api.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="40cdbe0e-44ab-432b-8dd4-a81c56775fd6" >
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="48dd6c6b-db29-41a7-bedd-9c404cdb430b" file="config.yaml" />
+	<american-flights-api:config name="American_Flights_API_Config" doc:name="American Flights API Config" doc:id="613c0ba4-9ed0-4190-98b3-29594fb3d5ef" property_host="${american.host}" property_port="${american.port}" property_protocol="${american.protocol}" />
+	<http:request-config name="Hotel_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="152a2a95-03d8-4966-8d21-a32756389d0a" >
+		<http:request-connection protocol="HTTPS" host="${hotel.host}"/>
+	</http:request-config>
+	<http:request-config name="Car_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="3cd7fd76-fc88-4d1e-962b-41d4821f21ed">
+		<http:request-connection host="${car.host}" protocol="HTTPS"/>
+	</http:request-config>
+	<http:request-config name="Hotel_Auth_Token_HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="496ae589-1ef7-4572-80b8-dee7e4351151" >
+		<http:request-connection protocol="HTTPS" host="test.api.amadeus.com" />
+	</http:request-config>
+	<flow name="travelservicesFlow" doc:id="325e8f77-80e7-4616-a454-ecaac9a5f7d1" >
+		<http:listener doc:name="GET /travelServices" doc:id="4dfc4a31-ebfe-4b65-a139-e7a686661bd4" config-ref="HTTP_Listener_config" path="/travelServices"/>
+		<scatter-gather doc:name="Scatter-Gather" doc:id="b21a7713-d138-4627-a388-abcb4b5f8ef5" >
+			<route >
+				<flow-ref doc:name="getFlightsFlow Reference" doc:id="bfb7c977-60c6-4be6-9f61-a2fa096e2373" name="getFlightsFlow"/>
+			</route>
+			<route >
+				<flow-ref doc:name="hotelFlow Reference" doc:id="2536b1df-a149-425d-9059-1c0dac406590" name="hotelFlow"/>
+			</route>
+			<route >
+				<flow-ref doc:name="get Car Rental Flow Reference" doc:id="d215081f-bfa3-443f-9196-2dcb7a718c61" name="carRentalFlow"/>
+			</route>
+		
+</scatter-gather>
+		<ee:transform doc:name="Transform Message" doc:id="7cb64056-64e2-4284-9cea-5c71fc9a2706" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[payload] map ((item, index) -> {
+    travelPackage:{
+        flights: item[0].payload,
+        hotels: item [1].payload,
+        carRentals : item[2].payload.*carRental map ((item, index) -> item) 
+    }
+})]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="f5f20a45-e5fb-40f4-ad9a-1b60ca60165c" message="#[payload]"/>
+		<error-handler>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="9ff92d5d-e2e7-499e-a318-94fc95b2e2bf" type="ANY">
+				<set-payload value='#[output application/json&#10;---&#10;{&#10;	errorSource:"error in travel services",&#10;	errorDescription: error.description&#10;}]' doc:name="Set Payload" doc:id="a52a582d-f974-48a6-8b34-593f001f6e71" />
+			</on-error-continue>
+		</error-handler>
+
+</flow>
+	<flow name="carRentalFlow" doc:id="987c3e4b-67e8-4f61-9ac4-b2a1a0abb1ab" >
+		<http:listener doc:name="GET /cars" doc:id="1aea7306-5d76-4950-a7a9-21c5db99a617" config-ref="HTTP_Listener_config" path="/cars"/>
+		<flow-ref doc:name="set Query Params Flow Reference" doc:id="d849e6ed-0b1b-469c-aa87-df122060929e" name="setQueryParamasFlow"/>
+		<http:request method="GET" doc:name="Get Car Rental airportCode" doc:id="ba7d4fe6-1f0c-44b0-86be-bba248aab8b2" config-ref="Car_HTTP_Request_configuration" path="${car.path}">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"X-RapidAPI-Host" : "skyscanner44.p.rapidapi.com",
+	"X-RapidAPI-Key" : "f7d2af14a5mshe3bb2b705a7d728p16df6fjsn2792fc8ea860"
+}]]]></http:headers>
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"query" : attributes.queryParams.cityCode
+}]]]></http:query-params>
+		</http:request>
+		<set-variable value="#[payload[0].entity_id]" doc:name="Set airportCode" doc:id="ec1094f9-82ab-42a2-a2c3-a354091981c7" variableName="airportCode"/>
+		<logger level="INFO" doc:name="Logger" doc:id="b1187d39-8529-4fb3-a18c-657155d5d3c6" message="#[vars.airportCode]"/>
+		<http:request method="GET" doc:name="Get Car Rentals By airportCode" doc:id="bb4361fd-3080-4533-8e77-2a454f5241da" config-ref="Car_HTTP_Request_configuration" path="/search-rentacar">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"X-RapidAPI-Host" : "skyscanner44.p.rapidapi.com",
+	"X-RapidAPI-Key" : "f7d2af14a5mshe3bb2b705a7d728p16df6fjsn2792fc8ea860"
+}]]]></http:headers>
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"returnTime" : vars.returnTime,
+	"pickupTime" : vars.pickupTime,
+	"pickupId" : vars.airportCode,
+	"pickupDate" : vars.pickupDate,
+	"returnDate" : vars.returnDate
+}]]]></http:query-params>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="8049bb08-fe8b-4ef3-8b21-561330183741" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.providers]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="7887bfec-673e-476c-9cb7-54e3bb2e2876" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+---
+[payload mapObject ((value, key, index) ->
+    carRental:[value] map ((item, index) ->{
+        carRentalCompnayName: item.provider_name,
+        companyRating: item.rating
+    })
+ )]
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<sub-flow name="setQueryParamasFlow" doc:id="a82e1bec-65b3-4014-ba92-fd51e12774dd" >
+		<set-variable value="#[attributes.queryParams.pickupDate]" doc:name="Set pickupDate" doc:id="bb697a0b-b11b-461c-90ec-708ef17333da" variableName="pickupDate"/>
+		<set-variable value="#[attributes.queryParams.pickupTime]" doc:name="Set pickupTime" doc:id="9382749f-7c28-471a-bc43-9e1cf4b642ba" variableName="pickupTime"/>
+		<set-variable value="#[attributes.queryParams.returnDate]" doc:name="Set returnDate" doc:id="362397da-2958-47fb-bab6-3b10f54fe8bc" variableName="returnDate"/>
+		<set-variable value="#[attributes.queryParams.returnTime]" doc:name="Set returnTime" doc:id="67eda34e-9a27-4f3a-8199-9b345ee08fc2" variableName="returnTime"/>
+	</sub-flow>
+	<flow name="hotelFlow" doc:id="883b0f81-cf8f-414a-b49a-8f4d9c371988" >
+		<http:listener doc:name="GET /hotels" doc:id="389be080-4939-4afb-acf2-6bdf8454b577" config-ref="HTTP_Listener_config" path="/hotels"/>
+		<http:request method="GET" doc:name="Get All Hotels By cityCode" doc:id="81c84e57-d221-4207-a19f-6535de2471b0" config-ref="Hotel_HTTP_Request_configuration" path="${hotel.path}">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : attributes.headers.Authorization
+}]]]></http:headers>
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"radius" : attributes.queryParams.radius,
+	"cityCode" : attributes.queryParams.cityCode
+}]]]></http:query-params>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="bdfcd0c5-748b-4729-9ccf-6eb40b06aa10" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+payload.data map ((item, index) ->{
+    hotelId: item.hotelId,
+    hotelName: item.name
+} )]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="b0ca40f7-816b-4187-a4e9-fcf2f5103edb" type="HTTP:UNAUTHORIZED">
+				<logger level="INFO" doc:name="Logger" doc:id="a8eddc84-ea73-413f-841f-3ae29be08cdc" message="Authorization token is expired!" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+<!-- [STUDIO:"travelservicesFlow1"]	<flow name="travelservicesFlow1" doc:id="57e62768-500b-4ef3-8262-8a020be0af25" >
+		<http:listener doc:name="Listener" doc:id="a235ee5d-29eb-40f1-a589-7e9e873418ca" config-ref="HTTP_Listener_config" path="/auth"/>
+		<flow-ref doc:name="Flow Reference" doc:id="9b74e1ca-9213-4d5a-9318-d339359e10bf" name="getHotelAuthTokenSubflow"/>
+	</flow> [STUDIO] -->
+<!-- [STUDIO:"getHotelAuthTokenSubflow"]	<sub-flow name="getHotelAuthTokenSubflow" doc:id="b29012ab-91c8-4ab6-b6b8-1840a1b779eb" >
+		<http:request method="POST" doc:name="Request" doc:id="b362bcc7-6fe4-41d7-86dc-0e7b482ff680" config-ref="Hotel_Auth_Token_HTTP_Request_configuration" path="/v1/security/oauth2/token">
+			<http:body ><![CDATA[#[%dw 2.0
+output application/x-www-form-urlencoded
+&#45;&#45;-
+{
+grant_type: "client_credentials",
+client_id: "Wpt1bGAa7VJKnpzCQXOWRgSphj96uvZR",
+client_secret: "JTBmZ9eQhxaXMKIE"
+}]]]></http:body>
+		</http:request>
+		<set-variable value="#[payload.access_token]" doc:name="Set authToken" doc:id="cb3776c2-d4a9-4e56-b24a-3d14f0a2fa05" variableName="authToken"/>
+		<logger level="INFO" doc:name="Logger" doc:id="eeda065a-b6ba-40a3-a71d-1c500f993305" message="#[vars.authToken]"/>
+	</sub-flow> [STUDIO] -->
+	<flow name="getFlightsFlow" doc:id="97bad19f-247b-4eb1-a803-55d72b087d6c" >
+		<http:listener doc:name="getFlights" doc:id="8614eaff-aa0f-4ecf-b4dc-0d3012dd0b93" config-ref="HTTP_Listener_config" path="/flights"/>
+		<set-variable value="#[attributes.queryParams.cityCode]" doc:name="Set cityCode" doc:id="ced0cc99-5b69-452d-b08c-20d721706ab6" variableName="cityCode"/>
+		<choice doc:name="Choice" doc:id="579cfc5f-2d21-41ea-8263-c27a3ea01669" >
+			<when expression="#[vars.cityCode == null]">
+				<flow-ref doc:name="allFlightsSubFlow" doc:id="f021c8f8-f959-4134-8cac-afe6512d1c8d" name="allFlightsSubFlow"/>
+			</when>
+			<otherwise >
+				<american-flights-api:get-flights doc:name="Get flights " doc:id="130a6317-7430-44a1-9173-3f38b160e26b" config-ref="American_Flights_API_Config" client-id="${american.client_id}" client-secret="${american.client_secret}" />
+				<ee:transform doc:name="Filter Flight By City Code" doc:id="b526ad08-3c04-42a9-9d00-8d712abf3d4f">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload filter (value, index) -> (value.destination == vars.cityCOde)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="e843e514-f49a-46d5-8fc5-af4737173e5e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map ((item, index) -> {
+    id : item.ID,
+    orgin: item.origin,
+    destination: item.destination,
+    departureDate: item.departureDate,
+    price: item.price
+} )]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<sub-flow name="allFlightsSubFlow" doc:id="a876b90f-6d32-4461-991c-4bb4952d4941" >
+		<american-flights-api:get-flights doc:name="Get flights" doc:id="f1f3a212-8b6d-4a2f-8e34-6a9f5b7a72dd" config-ref="American_Flights_API_Config" client-id="${american.client_id}" client-secret="${american.client_secret}" />
+	</sub-flow>
+<!-- [STUDIO:"getFlightsFlow"]	<flow name="getFlightsFlow" doc:id="6890ed70-0974-4aca-8dce-eaf383ad0519" >
+		<http:listener doc:name="GET /flights" doc:id="5cd6d0a6-d026-4804-a33f-59543bb9b7c5" config-ref="HTTP_Listener_config" path="${flights.path}"/>
+		<american-flights-api:get-flights doc:name="Get flights" doc:id="ebbaaf6b-7d49-46b9-b978-f3f440503e68" config-ref="American_Flights_API_Config" client-id="${american.client_id}" client-secret="${american.client_secret}" />
+	
+</flow> [STUDIO] -->
+</mule>

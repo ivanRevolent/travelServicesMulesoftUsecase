@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_987c3e4b_67e8_4f61_9ac4_b2a1a0abb1ab_Output_Variables_airportCode = Any
+
